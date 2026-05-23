@@ -403,6 +403,21 @@ Among the tested parameters, **`meter_capacity` produced the strongest change in
 
 ---
 
+## Sensitivity notes
+
+Detailed sensitivity-analysis notes are available in `sensitivity/`:
+
+- ramp metering sensitivity
+- alpha/beta weight sensitivity
+- fairness weight sensitivity
+- safe-threshold sensitivity
+- penalty-weight sensitivity
+- arrival-demand sensitivity
+- initial ramp queue sensitivity
+---
+
+
+
 ## Repository purpose
 
 This repository documents the transition from:
