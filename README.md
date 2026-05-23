@@ -74,6 +74,9 @@ where:
 | $u_4$ | 1201548 | HARBOR 2 | 11.27 |
 | $u_5$ | 1201580 | EUCLID | 12.27 |
 
+## ramp_figure folder
+The ramp-location figures were captured using Google Earth. Ramp lengths were also measured in Google Earth and used as supporting geometric reference values for the selected on-ramp locations.
+
 ### Selected off-ramps
 
 | Variable | station_id | location | Abs PM |
