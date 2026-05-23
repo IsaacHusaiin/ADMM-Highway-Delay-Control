@@ -1,13 +1,28 @@
 # Highway Corridor Delay Optimization with CTM and ADMM
 
-This project models and optimizes traffic delay on **I-405 southbound** using **Caltrans PeMS** data, a **Cell Transmission Model (CTM)**, and a planned **ADMM-based ramp control framework**.
+This project models and optimizes traffic delay on **I-405 southbound** using **Caltrans PeMS** data, an **8-cell Cell Transmission Model (CTM)**, and a **dynamic ADMM-based ramp metering framework**.
 
-The main goal is to minimize total corridor cost by combining:
+The main goal is to reduce total corridor cost by combining:
 
 - **mainline delay**
 - **local ramp delay**
 - **fairness across ramps**
 - **capacity protection**
+
+---
+
+## Current main result
+
+Under the **current selected setup**, the ADMM-controlled simulation reduced:
+
+- **mainline delay** from **26532.175** to **15046.948 veh-min**
+- **safe-threshold penalty** from **265407.689** to **0.0**
+
+while the **physical-capacity penalty remained inactive**.
+
+This indicates that the ADMM controller substantially improved freeway operating conditions without exceeding hard physical storage limits.
+
+> **Note:** The numerical results below correspond to the current selected setup. They may change if penalty multipliers, ramp-demand assumptions, metering limits, or other model parameters are changed.
 
 ---
 
@@ -24,7 +39,7 @@ where:
 - $L_{\text{mainline}}(t)$ = state-based freeway mainline delay
 - $L_{\text{local}}(t)$ = local road / on-ramp delay
 - $L_{\text{fair}}(t)$ = fairness penalty across ramps
-- $L_{\text{cap}}(t)$ = capacity penalty on the mainline
+- $L_{\text{cap}}(t)$ = capacity penalty on the mainline and ramps
 
 ---
 
@@ -71,7 +86,7 @@ where:
 
 ## Main modeling idea
 
-This project uses two levels of modeling:
+This project uses two levels of modeling.
 
 ### 1. Flow-based benchmark
 Observed PeMS speeds and flows are used to compute an empirical **flow-based mainline delay benchmark**.
@@ -79,7 +94,7 @@ Observed PeMS speeds and flows are used to compute an empirical **flow-based mai
 ### 2. State-based optimization model
 The actual optimization uses a **state-based mainline delay** that accounts for:
 
-- stored vehicles inside each segment
+- stored vehicles inside each cell
 - blocked discharge
 - conservation of vehicles
 - ramp inflows and off-ramp outflows
@@ -88,16 +103,16 @@ This makes it better suited for control and optimization than a pure flow-based 
 
 ---
 
-## Current CTM redesign status
+## CTM redesign
 
-The original CTM prototype used **6 cells** and **5-minute steps**, but that discretization was too coarse.
+The original CTM prototype used **6 cells** and **5-minute steps**, but that discretization was too coarse and risked violating the **CFL condition**.
 
-The model has now been redesigned to use:
+The model has therefore been redesigned to use:
 
 - **8 CTM cells**
 - **30-second simulation step**
 
-This redesign was chosen to satisfy the **CFL condition**:
+The CFL condition is:
 
 $$
 \frac{v_{ff}\Delta T}{\Delta x}\le 1
@@ -121,7 +136,7 @@ $$
 \frac{68.1 \times (1/120)}{0.6125}=0.927 \le 1
 $$
 
-So the new CTM grid is physically valid.
+So the redesigned CTM grid is physically valid for the selected discretization.
 
 ---
 
@@ -140,10 +155,10 @@ So the new CTM grid is physically valid.
 
 ### Lane-count assumption
 
-- Cell 5: **6 lanes**
-- All other cells: **5 lanes**
+- Cell 5 has **6 lanes**
+- All other cells have **5 lanes**
 
-### Current per-cell capacities
+### Per-cell capacities
 
 Using average per-lane doorway capacity:
 
@@ -193,16 +208,173 @@ $$
 
 and fairness penalizes imbalance across ramps.
 
-### Capacity penalty
+### Capacity protection
 Capacity protection includes:
 
 - doorway flow limit
 - safe occupancy threshold
 - hard physical storage limit
+- spillback beyond ramp storage
 
 ---
 
-## Current progress
+## Baseline and controlled simulations
+
+The project now includes both:
+
+- a **120-step uncontrolled baseline CTM simulation**
+- a **120-step ADMM-controlled simulation**
+
+Since each step is 30 seconds, the total horizon is:
+
+- **120 steps**
+- **60 minutes**
+
+The baseline simulation tracks:
+
+- freeway state evolution
+- ramp queues
+- spillback
+- mainline delay
+- local delay
+- fairness penalty
+- doorway penalty
+- safe-threshold penalty
+- physical-capacity penalty
+- total capacity penalty
+- total objective
+
+The ADMM-controlled simulation uses the same physical CTM, but replaces fixed observed ramp release with optimized ramp release decisions at each time step.
+
+---
+
+## Objective normalization
+
+The raw objective terms operate on very different scales. For example:
+
+- delay terms may be on the order of tens of thousands
+- safe-threshold penalties may be on the order of hundreds of thousands or millions
+
+To avoid domination by the largest raw term, the project computes baseline normalization constants from the uncontrolled 120-step simulation and uses a normalized weighted objective of the form:
+
+$$
+J =
+\alpha_{main}\tilde D_{main}
++ \beta_{local}\tilde D_{local}
++ \gamma \tilde L_{fair}
++ \lambda_1 \tilde P_{door}
++ \lambda_2 \tilde P_{safe}
++ \lambda_3 \tilde P_{phys}
++ \lambda_4 \tilde P_{spill}
+$$
+
+This allows the optimizer to compare terms fairly while still enforcing modeling priorities through the weights.
+
+---
+
+## ADMM framework
+
+The ADMM controller optimizes ramp release decisions at ramps:
+
+- $u_1$ to $u_5$
+
+The optimization is split into two coupled blocks:
+
+### Ramp block
+Optimizes:
+
+- local delay
+- fairness penalty
+- spillback penalty
+
+### Freeway block
+Optimizes:
+
+- mainline delay
+- doorway penalty
+- safe-threshold penalty
+- physical-capacity penalty
+
+ADMM coordinates the two blocks by:
+
+- solving a local update for ramp-side variable copy $u$
+- solving a global update for freeway-side variable copy $z$
+- updating the dual variable $y$
+- checking primal and dual residuals for convergence
+
+This allows ramp decisions to be optimized while maintaining consistency between the ramp subsystem and the freeway CTM subsystem.
+
+---
+
+## Final selected setup used in reported results
+
+The main baseline-vs-ADMM comparison uses the following parameter set:
+
+- `meter_capacity = 0.9 * observed_release`
+- `alpha_main = 10`
+- `beta_local = 3`
+- `gamma = 2`
+- `eta = 0.7`
+- `lambda_1 = 1`
+- `lambda_2 = 0.5`
+- `lambda_3 = 1`
+- `lambda_4 = 0.5`
+- `arrival_multiplier = 1.5`
+- `initial ramp queue = 0`
+
+---
+
+## Baseline vs ADMM (current selected setup)
+
+| Metric | Baseline | ADMM |
+|---|---:|---:|
+| Mainline Delay (veh-min) | 26532.175 | 15046.948 |
+| Local Delay (veh-min) | 15101.550 | 15406.420 |
+| Fairness Penalty | 57.361 | 44.459 |
+| Doorway Penalty | 5090.232 | 2496.959 |
+| Safe Penalty | 265407.689 | 0.000 |
+| Spillback Penalty | 2852.625 | 4219.089 |
+| Normalized Weighted Total Objective | 17.000 | 11.512 |
+
+### Interpretation of the reported setup
+
+In the final selected setup:
+
+- **mainline delay, local delay, fairness, doorway, safe-threshold, and spillback terms were all active**
+- **physical-capacity penalty remained inactive**
+
+This means the corridor became operationally congested and exceeded the safe operating threshold in the uncontrolled baseline, but never reached hard jam-density storage.
+
+The ADMM controller improved freeway performance substantially, primarily by reducing ramp releases relative to the observed baseline, which eliminated safe-threshold violations and lowered mainline delay at the cost of modestly higher local delay and spillback.
+
+---
+
+## Sensitivity analysis
+
+The project also includes sensitivity studies on key parameters, including:
+
+- `meter_capacity`
+- `alpha_main`
+- `beta_local`
+- `gamma`
+- `eta`
+- `lambda_1, lambda_2, lambda_3, lambda_4`
+- `arrival_multiplier`
+- initial ramp queue
+
+These tests show that:
+
+- `meter_capacity` produces the strongest change in ADMM behavior
+- `gamma` has a moderate effect
+- `eta` mainly changes when the safe-threshold penalty activates
+- `alpha_main` and `beta_local` have relatively small effects in the tested ranges
+- physical-capacity penalty remains inactive in the reported final scenarios
+
+Among the tested parameters, **`meter_capacity` produced the strongest change in ADMM behavior**.
+
+---
+
+## Current project status
 
 ### Completed
 - corridor and station selection
@@ -211,27 +383,38 @@ Capacity protection includes:
 - local ramp delay model
 - fairness penalty model
 - capacity penalty model
-- first 6-cell CTM prototype
-- corrected CTM flow-propagation logic
-- redesigned **8-cell, 30-second CTM network**
-- coded **network-definition block**:
-  - cell ranges
-  - ramp assignment
-  - lane counts
-  - doorway capacities
-  - physical capacities
-
-### In progress
-- Block B: initial state definition
-  - mainline initial occupancies $x_i^0$
-  - ramp initial queues $R_i^0$
-
-### Planned
+- 8-cell, 30-second CTM redesign
+- initial mainline state reconstruction
+- ramp initial state and demand setup
 - one-step CTM update module
-- multi-step baseline CTM simulation
-- objective evaluation modules
-- ADMM ramp-control implementation
-- baseline vs controlled comparison
+- 120-step baseline CTM simulation
+- objective normalization
+- one-step ADMM optimization
+- 120-step ADMM-controlled simulation
+- baseline vs ADMM comparison
+- sensitivity analysis on key parameters
+
+### Future extensions
+- time-varying boundary inflow
+- time-varying ramp demand
+- alternative fairness definitions
+- calibration against additional observed periods
+- comparison across multiple congestion scenarios
 
 ---
 
+## Repository purpose
+
+This repository documents the transition from:
+
+- coarse static segment analysis
+
+to
+
+- fine dynamic CTM baseline simulation
+
+and finally to
+
+- dynamic ADMM-controlled ramp metering on the same 8-cell freeway corridor
+
+The overall purpose is to create a physically consistent and optimization-ready freeway corridor model that can support delay reduction, ramp metering, and future control experiments.
