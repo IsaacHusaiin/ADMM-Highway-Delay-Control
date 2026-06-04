@@ -1,86 +1,71 @@
+# Fairness Weight Sensitivity: `gamma`
 
-## What this is
-We tested how changing the **fairness weight** affects ADMM, while keeping:
+## Purpose
 
-- `meter_capacity = 0.9 * observed_release`
-- `alpha_main = 10`
-- `beta_local = 3`
-- all other settings fixed
+This sensitivity test studies how the fairness weight `gamma` affects the ramp-metering controller.
 
-Tested values:
+The fairness weight controls how strongly the controller penalizes imbalance between ramp queues.
 
-- `gamma ∈ {0.5, 1, 2, 5}`
-
-## Why we are doing this
-`gamma` controls how much ADMM cares about **fairness across ramps**.
-
-Goal:
-- check whether increasing fairness importance changes the actual ADMM solution
-- see the tradeoff between fairness, mainline delay, local delay, and spillback
+A larger `gamma` gives more importance to keeping ramp queue stress balanced across ramps.
 
 ---
 
-## Baseline (same for all cases)
+## Fairness Term
 
-| Metric | Baseline |
-|---|---:|
-| Mainline Delay | 26532.175 |
-| Local Delay | 15101.550 |
-| Doorway Penalty | 5090.232 |
-| Safe Penalty | 265407.689 |
-| Spillback Penalty | 2852.625 |
-| Total Capacity Penalty | 273350.545 |
+Ramp queue stress is computed by comparing each ramp queue to its maximum storage capacity.
 
-> Fairness baseline changes with `gamma`, so it is shown inside the results table.
+For ramp \(i\):
+
+$$
+\phi_{i,t}^{cap}
+=
+\min
+\left(
+\frac{R_{i,t}}{R_{max,i}},
+1
+\right)
+$$
+
+where:
+
+$$
+R_{i,t}
+$$
+
+is the ramp queue at ramp \(i\) and time \(t\), and
+
+$$
+R_{max,i}
+$$
+
+is the maximum storage capacity of ramp \(i\).
+
+The fairness penalty compares queue stress across ramps:
+
+$$
+P_{\text{fair},t}
+=
+\gamma
+\sum_{i<j}
+\left(
+\phi_{i,t}^{cap}
+-
+\phi_{j,t}^{cap}
+\right)^2
+$$
 
 ---
 
-## Results Table
+## Meaning of `gamma`
 
-| `gamma` | Fairness Penalty Before | Mainline Delay (After) | Local Delay (After) | Fairness Penalty (After) | Doorway Penalty (After) | Safe Penalty (After) | Spillback Penalty (After) | Total Capacity Penalty (After) | Normalized Weighted Objective (After) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 0.5 | 14.340 | 15232.647 | 15388.007 | 11.528 | 2524.579 | 0.000 | 4215.258 | 6739.837 | 10.435 |
-| 1.0 | 28.680 | 15166.114 | 15394.438 | 22.762 | 2512.511 | 0.000 | 4216.387 | 6728.898 | 10.801 |
-| 2.0 | 57.361 | 15046.948 | 15406.420 | 44.459 | 2496.959 | 0.000 | 4219.089 | 6716.048 | 11.512 |
-| 5.0 | 143.402 | 14741.562 | 15437.376 | 104.414 | 2435.586 | 0.000 | 4228.096 | 6663.682 | 13.483 |
+The parameter `gamma` controls the importance of fairness in the objective.
 
----
+If `gamma` is small, the controller gives less importance to balancing ramp queues.
 
-## Main observations
-- Increasing `gamma` causes **moderate** changes in the ADMM solution
-- Higher `gamma` gives:
-  - slightly lower **mainline delay**
-  - slightly lower **doorway penalty**
-  - slightly lower **total capacity penalty**
-- But higher `gamma` also gives:
-  - slightly higher **local delay**
-  - slightly higher **spillback penalty**
+If `gamma` is large, the controller gives more importance to avoiding large differences between ramp queue stress levels.
 
-## Important note
-The printed fairness penalty increases with `gamma` because the term itself is weighted by `gamma`.
+In simple terms:
 
-So the point of this test is not the raw fairness number alone, but how changing fairness importance shifts the overall tradeoff.
-
-## Interpretation
-Compared to earlier tests:
-
-- `meter_capacity` had the **largest effect**
-- `gamma` has a **moderate effect**
-- `alpha_main` and `beta_local` had only a **small effect** in the tested ranges
-
-So fairness matters, but controller authority still matters much more.
-
-## Recommended choice
-A clean and balanced setting is:
-
-- `gamma = 2`
-
-Reason:
-- fairness is given meaningful importance
-- mainline still improves well
-- local/spillback costs remain small
-- easier to defend than `gamma = 5`
-
-## Final conclusion
-With `meter_capacity = 0.9 * observed_release`, increasing `gamma` changes the ADMM solution moderately. Higher fairness weight slightly improves freeway-side performance and doorway penalty, while slightly worsening local delay and spillback. Safe-threshold penalty remains zero for all tested values.
-
+```text
+small gamma = fairness matters less
+large gamma = fairness matters more
