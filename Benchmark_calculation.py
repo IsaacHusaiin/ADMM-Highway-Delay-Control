@@ -2,7 +2,6 @@
 Official 9-cell / 15-second CTM benchmark reproduction script.
 
 """
-
 from pathlib import Path
 import pickle
 from typing import Any
