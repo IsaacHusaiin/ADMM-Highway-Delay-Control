@@ -1295,7 +1295,7 @@ reproduced_totals["raw_objective"] = (
 )
 
 
-print("Benchmark.py reproduction check (vs exported official_totals)")
+print("Benchmark_calculation.py reproduction check (vs exported official_totals)")
 
 comparison_rows = []
 max_abs_diff = 0.0
@@ -1310,7 +1310,7 @@ for key in reproduced_totals:
 
 print("max abs totals diff vs official:", max_abs_diff)
 if max_abs_diff >= 1e-6:
-    raise AssertionError("Benchmark.py does NOT reproduce the exported official benchmark.")
+    raise AssertionError("Benchmark_calculation.py does NOT reproduce the exported official benchmark.")
 print("PASS: totals reproduce the official benchmark (receiving-aware CTM, LINEAR spillback).")
 
 # Ramp mass conservation.
