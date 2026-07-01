@@ -1,4 +1,4 @@
-Here is a shorter README version that is still accurate and defensible:
+
 
 # ADMM-MPC Ramp Metering with a 9-Cell CTM
 
