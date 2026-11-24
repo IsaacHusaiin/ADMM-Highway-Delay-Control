@@ -1,4 +1,4 @@
-ADMM-MPC Ramp Metering with a 9-Cell CTM
+# ADMM-MPC Ramp Metering with a 9-Cell CTM
 
 This project studies freeway ramp metering using a 9-cell Cell Transmission Model (CTM), Caltrans PeMS District 5 data, a fixed-policy baseline, a centralized convex QP surrogate, and an ADMM-MPC controller.
 
@@ -8,16 +8,16 @@ The goal is to test whether an optimized controller can reduce the total system 
 
 ## Main idea
 
-The project compares four policies/models:
+| File | Purpose |
+| --- | --- |
+| `Benchmark_calculation.ipynb` | Builds and validates the fully open CTM benchmark and exports shared inputs. |
+| `Benchmark_calculation.py` | Runs the benchmark outside Jupyter and reports its two-hour and clearance-adjusted scores. |
+| `fixed_policy.ipynb` | Searches for one constant release cap per ramp. |
+| `Benchmark_convex_QP.ipynb` | Tests full-horizon sequential QP candidates through the exact CTM. |
+| `ADMM_MPC.ipynb` | Runs the standard receding-horizon controller. |
+| `ADMM_MPC_mainlinedelay_focus.ipynb` | Runs the separate mainline-weighted controller experiment. |
 
-| File                          | Purpose                                                                                                |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `Benchmark_calculation.ipynb` | Builds the exact CTM benchmark and exports shared inputs.                                              |
-| `fixed_policy.ipynb`         | Searches for one constant release cap per ramp.                                                       |
-| `Benchmark_convex_QP.ipynb`   | Builds the centralized convex QP surrogate used as the optimization reference.                         |
-| `ADMM_MPC.ipynb`              | Final receding-horizon controller; optimizes, applies one command, updates the exact CTM, and replans. |
-
-`Benchmark_calculation.ipynb` exports `shared_benchmark_inputs.pkl`. The other notebooks reuse the benchmark notebook's CTM code and inputs.
+`Benchmark_calculation.ipynb` exports `shared_benchmark_inputs.pkl`. The notebooks and standalone script use the benchmark notebook as the source for the CTM and inputs.
 
 ---
 
@@ -100,7 +100,7 @@ spillback penalty per ramp per step = λ_spillback × step-average B × Δt
 
 `Benchmark_calculation.ipynb` runs the exact CTM with all ramps fully open.
 
-It is the source-of-truth baseline and evaluator.
+The notebook reports the two-hour objective. `Benchmark_calculation.py` also reports the clearance-adjusted objective.
 
 ```text
 Two-hour objective = 88,338.75
@@ -141,7 +141,7 @@ The last local QP predicted an objective of **88,328.03**. No trial improved the
 
 ### ADMM-MPC
 
-`ADMM_MPC.ipynb` is the final controller.
+`ADMM_MPC.ipynb` runs the standard controller.
 
 At every 15-second step, it:
 
@@ -161,26 +161,26 @@ AW = 1.0
 Terminal queue weight = 30 minutes
 ```
 
-Clarabel and OSQP solve the same planning QP.
+Clarabel and OSQP solve the same planning QP. The OSQP-first runs can fall back to Clarabel.
+
+`ADMM_MPC_mainlinedelay_focus.ipynb` uses `K = 5` and `AW = 2.3` in the planner. It caps meter commands at observed ramp flow times the arrival multiplier and scores realized performance with the common benchmark weights.
 
 ---
 
 ## Final results
 
-Exact-CTM objectives after the remaining traffic clears with fully open ramps and zero new demand
+The table shows exact CTM costs at the default arrival multiplier of **1.2**, including clearance with fully open ramps and zero new demand.
 
-| Policy                           | Objective after clearance |
-| -------------------------------- | ------------------------: |
-| Fully open benchmark             |                 97,342.00 |
-| Best fixed policy found          |            **97,322.95** |
-| Full-horizon QP replay           |                 97,342.00 |
-| MPC, K = 5 (Clarabel and OSQP)    |       97,404.90–97,404.95 |
-| MPC, K = 10 (Clarabel and OSQP)   |       97,475.27–97,475.37 |
+| Policy | Cost after clearance | Change vs. fully open |
+| --- | ---: | ---: |
+| Fully open benchmark | 97,342.00 | 0.000% |
+| Best fixed rate found | **97,322.95** | **−0.020%** |
+| Full-horizon convex QP replay | 97,342.00 | 0.000% |
+| Standard MPC, K = 5 | 97,404.90–97,404.95 | +0.065% |
+| Standard MPC, K = 10 | 97,475.27–97,475.37 | +0.137% |
+| Mainline-focused MPC, K = 5, AW = 2.3 | 99,652.31–99,652.95 | +2.373% to +2.374% |
 
-| MPC window | Cost change vs. fully open |
-| ---------- | -------------------------: |
-| K = 5      |                    +0.065% |
-| K = 10     |                    +0.137% |
+MPC ranges cover the Clarabel and OSQP-first runs.
 
 ---
 
@@ -193,9 +193,14 @@ Run notebooks in this order:
 2. fixed_policy.ipynb
 3. Benchmark_convex_QP.ipynb
 4. ADMM_MPC.ipynb
+5. ADMM_MPC_mainlinedelay_focus.ipynb
 ```
 
-Keep the notebooks and raw PeMS files in the same folder.
+Keep the notebooks, Python script, and raw PeMS files in the same folder. Run the standalone benchmark from that folder.
+
+```powershell
+python .\Benchmark_calculation.py
+```
 
 ---
 
@@ -218,6 +223,6 @@ nbformat
 
 ## Important note
 
-The fixed-rate policy had the lowest total objective among the tested policies. MPC reduced freeway time, with higher ramp waiting and fairness costs.
+At the default arrival multiplier of 1.2, the fixed-rate policy had the lowest total objective. The MPC runs reduced freeway time and increased ramp waiting and fairness costs.
 
 The convex QP and ADMM convergence claims apply to the convex surrogate problem. Final performance is always evaluated using the exact CTM replay.
